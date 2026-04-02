@@ -612,6 +612,8 @@
                     <select id="productUnitInput">
                         <option value="g">g（グラム）</option>
                         <option value="kg">kg（キログラム）</option>
+                        <option value="ml">ml（ミリリットル）</option>
+                        <option value="L">L（リットル）</option>
                         <option value="枚">枚</option>
                         <option value="個">個</option>
                         <option value="本">本</option>
@@ -853,6 +855,10 @@
                         perUnit = perUnit / 1000;
                         usageUnit = 'g';
                     }
+                    if (product.baseUnit === 'L') {
+                        perUnit = perUnit / 1000;
+                        usageUnit = 'ml';
+                    }
                     const cost = perUnit * usageAmt;
                     savedCost = `<div class="product-unit-info" style="color:#27ae60;font-weight:600;">原価: ¥${cost.toFixed(1)}（${usageAmt}${usageUnit}使用）</div>`;
                 }
@@ -963,6 +969,11 @@
             // kgの場合は1gあたりに変換して表示
             if (u === 'kg') {
                 displayUnit = 'g';
+                displayPerUnit = perUnit / 1000;
+            }
+            // Lの場合は1mlあたりに変換して表示
+            if (u === 'L') {
+                displayUnit = 'ml';
                 displayPerUnit = perUnit / 1000;
             }
 
