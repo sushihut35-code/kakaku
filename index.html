@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>商品価格管理</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2c3e50">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "MS PGothic", "Hiragino Kaku Gothic Pro", sans-serif;
+            background: #f5f5f5;
+            padding: 10px;
+            padding-top: 70px;
+            padding-bottom: 80px;
+        }
+
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #2c3e50;
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .status-badge {
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            background: #3498db;
+        }
+
+        .status-badge.online {
+            background: #27ae60;
+        }
+
+        .status-badge.offline {
+            background: #e74c3c;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .main {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar {
+            background: #ecf0f1;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .sidebar-header {
+            padding: 12px 15px;
+            background: #d5dbdb;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+        }
+
+        .add-supplier-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .supplier-list {
+            list-style: none;
+            display: flex;
+            overflow-x: auto;
+            gap: 5px;
+            padding: 10px;
+        }
+
+        .supplier-item {
+            padding: 10px 15px;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #ddd;
+            font-size: 14px;
+        }
+
+        .supplier-item.active {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+
+        .delete-supplier {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 11px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .content {
+            padding: 15px;
+            min-height: 300px;
+        }
+
+        .content-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .content-header h2 {
+            font-size: 18px;
+        }
+
+        .add-product-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .product-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .product-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .product-info {
+            flex: 1;
+        }
+
+        .product-name {
+            font-weight: 600;
+            font-size: 15px;
+            margin-bottom: 5px;
+        }
+
+        .product-price {
+            color: #27ae60;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .product-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .edit-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .delete-product {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #95a5a6;
+            padding: 40px 20px;
+        }
+
+        .empty-state svg {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .footer-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            border-top: 1px solid #ddd;
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 0;
+            padding-bottom: max(10px, env(safe-area-inset-bottom));
+            z-index: 100;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            color: #95a5a6;
+            text-decoration: none;
+            font-size: 11px;
+        }
+
+        .nav-item.active {
+            color: #3498db;
+        }
+
+        .nav-icon {
+            font-size: 24px;
+        }
+
+        .save-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(39, 174, 96, 0.3);
+        }
+
+        .save-btn:disabled {
+            background: #95a5a6;
+            box-shadow: none;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            width: 100%;
+            max-width: 350px;
+        }
+
+        .modal-content h3 {
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+
+        .modal-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .modal-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .modal-btn.cancel {
+            background: #ecf0f1;
+            color: #7f8c8d;
+        }
+
+        .modal-btn.confirm {
+            background: #3498db;
+            color: white;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2c3e50;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 14px;
+            display: none;
+            z-index: 2000;
+            white-space: nowrap;
+        }
+
+        .toast.show {
+            display: block;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateX(-50%) translateY(20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(-50%) translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .install-banner {
+            position: fixed;
+            top: 60px;
+            left: 10px;
+            right: 10px;
+            background: #3498db;
+            color: white;
+            padding: 12px 15px;
+            border-radius: 10px;
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            z-index: 99;
+        }
+
+        .install-banner.show {
+            display: flex;
+        }
+
+        .install-btn {
+            background: white;
+            color: #3498db;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .close-install {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0;
+            margin-left: 10px;
+        }
+
+        /* 横画面PC対応 */
+        @media (min-width: 768px) {
+            body {
+                padding: 20px;
+                padding-top: 80px;
+                padding-bottom: 20px;
+            }
+
+            .header {
+                position: static;
+                padding: 20px;
+                border-radius: 10px 10px 0 0;
+            }
+
+            .footer-nav {
+                position: static;
+                border-top: none;
+                background: #ecf0f1;
+                margin-top: 20px;
+            }
+
+            .main {
+                flex-direction: row;
+                min-height: 400px;
+            }
+
+            .sidebar {
+                width: 250px;
+                border-bottom: none;
+                border-right: 1px solid #ddd;
+            }
+
+            .supplier-list {
+                flex-direction: column;
+                overflow-x: visible;
+            }
+
+            .supplier-item {
+                border-radius: 0;
+                border-left: none;
+                border-right: none;
+            }
+
+            .content {
+                flex: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="install-banner" id="installBanner">
+        <span>📱 ホーム画面に追加してアプリとして使えます</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <button class="install-btn" onclick="installApp()">追加</button>
+            <button class="close-install" onclick="closeInstallBanner()">×</button>
+        </div>
+    </div>
+
+    <div class="header">
+        <h1>📦 価格管理</h1>
+        <span class="status-badge online" id="statusBadge">オンライン</span>
+    </div>
+
+    <div class="container">
+        <div class="main">
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <span>業者一覧</span>
+                    <button class="add-supplier-btn" onclick="showAddSupplierModal()">+</button>
+                </div>
+                <ul class="supplier-list" id="supplierList"></ul>
+            </div>
+            <div class="content">
+                <div class="content-header">
+                    <h2 id="currentSupplier">業者を選択してください</h2>
+                    <button class="add-product-btn" id="addProductBtn" onclick="addProduct()" style="display:none;">+ 商品追加</button>
+                </div>
+                <div id="productArea"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-nav">
+        <button class="save-btn" id="saveBtn" onclick="saveData()">💾 保存</button>
+    </div>
+
+    <!-- 業者追加モーダル -->
+    <div class="modal" id="supplierModal">
+        <div class="modal-content">
+            <h3>業者の追加</h3>
+            <input type="text" class="modal-input" id="supplierNameInput" placeholder="業者名を入力" autofocus>
+            <div class="modal-buttons">
+                <button class="modal-btn cancel" onclick="closeSupplierModal()">キャンセル</button>
+                <button class="modal-btn confirm" onclick="addSupplier()">追加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- トースト -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // 設定
+        // API URL - スマホからはIPアドレスに自動的に切り替わります
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const API_URL = '/api/data';
+        const STORAGE_KEY = 'priceAppData';
+
+        let data = { suppliers: [] };
+        let currentSupplierIndex = null;
+        let isOnline = navigator.onLine;
+        let deferredPrompt = null;
+        let hasLocalChanges = false; // ローカルで変更があるか
+
+        // Service Worker登録
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        }
+
+        // インストールプロンプト
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            if (!localStorage.getItem('installDismissed')) {
+                document.getElementById('installBanner').classList.add('show');
+            }
+        });
+
+        function installApp() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then(() => {
+                    deferredPrompt = null;
+                    closeInstallBanner();
+                });
+            }
+        }
+
+        function closeInstallBanner() {
+            document.getElementById('installBanner').classList.remove('show');
+            localStorage.setItem('installDismissed', 'true');
+        }
+
+        // オンライン/オフライン検知
+        function updateOnlineStatus() {
+            isOnline = navigator.onLine;
+            const badge = document.getElementById('statusBadge');
+            if (isOnline) {
+                badge.textContent = 'オンライン';
+                badge.className = 'status-badge online';
+                // オンラインになったらサーバーと同期
+                syncWithServer();
+            } else {
+                badge.textContent = 'オフライン';
+                badge.className = 'status-badge offline';
+            }
+        }
+
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        updateOnlineStatus();
+
+        // データ読み込み
+        async function loadData() {
+            if (isOnline) {
+                try {
+                    const response = await fetch(API_URL);
+                    if (response.ok) {
+                        const serverData = await response.json();
+                        data = serverData;
+                        // ローカルにも保存
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                    }
+                } catch (e) {
+                    // エラーならローカルデータを使用
+                    loadLocalData();
+                }
+            } else {
+                loadLocalData();
+            }
+            renderSuppliers();
+        }
+
+        function loadLocalData() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                data = JSON.parse(saved);
+            }
+        }
+
+        // サーバーと同期
+        async function syncWithServer() {
+            if (!isOnline || hasLocalChanges) return; // ローカルで変更中はスキップ
+
+            try {
+                const response = await fetch(API_URL);
+                if (response.ok) {
+                    const serverData = await response.json();
+                    // サーバーデータの方が新しければ更新
+                    if (JSON.stringify(serverData) !== JSON.stringify(data)) {
+                        data = serverData;
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                        renderSuppliers();
+                        if (currentSupplierIndex !== null) renderProducts();
+                        showToast('データを同期しました');
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // データ保存
+        async function saveData() {
+            // ローカルに保存
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+            if (isOnline) {
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    if (response.ok) {
+                        hasLocalChanges = false; // 保存成功したのでフラグ解除
+                        showToast('保存しました');
+                        return;
+                    }
+                } catch (e) {}
+                showToast('オフラインモードで保存しました');
+            } else {
+                showToast('オフラインモードで保存しました');
+            }
+        }
+
+        // 業者一覧表示
+        function renderSuppliers() {
+            const list = document.getElementById('supplierList');
+            list.innerHTML = '';
+            data.suppliers.forEach((supplier, index) => {
+                const li = document.createElement('li');
+                li.className = 'supplier-item' + (index === currentSupplierIndex ? ' active' : '');
+                li.innerHTML = `
+                    <span onclick="selectSupplier(${index})">${escapeHtml(supplier.name)}</span>
+                    <button class="delete-supplier" onclick="deleteSupplier(${index})">×</button>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        // 業者選択
+        function selectSupplier(index) {
+            currentSupplierIndex = index;
+            renderSuppliers();
+            renderProducts();
+        }
+
+        // 商品一覧表示
+        function renderProducts() {
+            const area = document.getElementById('productArea');
+            const title = document.getElementById('currentSupplier');
+            const addBtn = document.getElementById('addProductBtn');
+
+            if (currentSupplierIndex === null) {
+                title.textContent = '業者を選択してください';
+                addBtn.style.display = 'none';
+                area.innerHTML = '<div class="empty-state"><div>👈</div>業者を選択してください</div>';
+                return;
+            }
+
+            const supplier = data.suppliers[currentSupplierIndex];
+            title.textContent = supplier.name;
+            addBtn.style.display = 'block';
+
+            if (supplier.products.length === 0) {
+                area.innerHTML = '<div class="empty-state"><div>📦</div>商品がありません<br>「+ 商品追加」で追加してください</div>';
+                return;
+            }
+
+            area.innerHTML = '<div class="product-list">' + supplier.products.map((product, pIndex) => `
+                <div class="product-item">
+                    <div class="product-info" onclick="editProduct(${pIndex})">
+                        <div class="product-name">${escapeHtml(product.name)}</div>
+                        <div class="product-price">¥${product.price.toLocaleString()}</div>
+                    </div>
+                    <div class="product-actions">
+                        <button class="edit-btn" onclick="editProduct(${pIndex})">編集</button>
+                        <button class="delete-product" onclick="deleteProduct(${pIndex})">削除</button>
+                    </div>
+                </div>
+            `).join('') + '</div>';
+        }
+
+        // 商品編集
+        async function editProduct(productIndex) {
+            const supplier = data.suppliers[currentSupplierIndex];
+            const product = supplier.products[productIndex];
+
+            const name = prompt('商品名', product.name);
+            if (name === null) return;
+            if (name.trim() === '') {
+                alert('商品名を入力してください');
+                return;
+            }
+
+            const price = prompt('価格（円）', product.price);
+            if (price === null) return;
+            const priceNum = parseInt(price);
+            if (isNaN(priceNum) || priceNum < 0) {
+                alert('正しい価格を入力してください');
+                return;
+            }
+
+            product.name = name.trim();
+            product.price = priceNum;
+            hasLocalChanges = true;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            renderProducts();
+            await saveData(); // サーバーにも保存
+        }
+
+        // 業者追加モーダル
+        function showAddSupplierModal() {
+            document.getElementById('supplierModal').classList.add('show');
+            document.getElementById('supplierNameInput').value = '';
+            document.getElementById('supplierNameInput').focus();
+        }
+
+        function closeSupplierModal() {
+            document.getElementById('supplierModal').classList.remove('show');
+        }
+
+        async function addSupplier() {
+            const name = document.getElementById('supplierNameInput').value.trim();
+            if (name === '') {
+                alert('業者名を入力してください');
+                return;
+            }
+
+            data.suppliers.push({
+                name: name,
+                products: []
+            });
+            hasLocalChanges = true;
+
+            closeSupplierModal();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            renderSuppliers();
+            await saveData(); // サーバーにも保存
+        }
+
+        // 業者削除
+        async function deleteSupplier(index) {
+            if (confirm('「' + data.suppliers[index].name + '」を削除しますか？')) {
+                data.suppliers.splice(index, 1);
+                if (currentSupplierIndex === index) {
+                    currentSupplierIndex = null;
+                } else if (currentSupplierIndex > index) {
+                    currentSupplierIndex--;
+                }
+                hasLocalChanges = true;
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                renderSuppliers();
+                renderProducts();
+                await saveData(); // サーバーにも保存
+            }
+        }
+
+        // 商品追加
+        async function addProduct() {
+            const supplier = data.suppliers[currentSupplierIndex];
+
+            const name = prompt('商品名');
+            if (name === null || name.trim() === '') return;
+
+            const price = prompt('価格（円）', '0');
+            const priceNum = parseInt(price);
+            if (isNaN(priceNum) || priceNum < 0) {
+                alert('正しい価格を入力してください');
+                return;
+            }
+
+            supplier.products.push({
+                name: name.trim(),
+                price: priceNum
+            });
+            hasLocalChanges = true;
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            renderProducts();
+            await saveData(); // サーバーにも保存
+            showToast('商品を追加しました');
+        }
+
+        // 商品削除
+        async function deleteProduct(productIndex) {
+            const supplier = data.suppliers[currentSupplierIndex];
+            if (confirm('「' + supplier.products[productIndex].name + '」を削除しますか？')) {
+                supplier.products.splice(productIndex, 1);
+                hasLocalChanges = true;
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                renderProducts();
+                await saveData(); // サーバーにも保存
+            }
+        }
+
+        // エスケープ
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // トースト表示
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        // エンターキー
+        document.getElementById('supplierNameInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') addSupplier();
+        });
+
+        // 定期同期（オンライン時のみ）
+        setInterval(() => {
+            if (isOnline) syncWithServer();
+        }, 10000);
+
+        // 初期化
+        loadData();
+    </script>
+</body>
+</html>
