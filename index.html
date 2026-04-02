@@ -220,6 +220,16 @@
             font-size: 12px;
         }
 
+        .calc-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
         .delete-product {
             background: #e74c3c;
             color: white;
@@ -426,6 +436,68 @@
             margin-left: 10px;
         }
 
+        /* 原価計算モーダル */
+        .calc-result {
+            background: #f0f9f0;
+            border: 2px solid #27ae60;
+            border-radius: 12px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .calc-result .unit-price {
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 8px;
+        }
+
+        .calc-result .cost-price {
+            font-size: 28px;
+            font-weight: bold;
+            color: #27ae60;
+        }
+
+        .calc-result .cost-price small {
+            font-size: 14px;
+            color: #555;
+        }
+
+        .calc-input-group {
+            margin-bottom: 15px;
+        }
+
+        .calc-input-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #555;
+        }
+
+        .calc-input-group input, .calc-input-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .calc-input-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .calc-input-row .calc-input-group {
+            flex: 1;
+        }
+
+        .product-unit-info {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 2px;
+        }
+
         /* 横画面PC対応 */
         @media (min-width: 768px) {
             body {
@@ -524,13 +596,64 @@
         </div>
     </div>
 
+    <!-- 商品追加・編集モーダル -->
+    <div class="modal" id="productModal">
+        <div class="modal-content">
+            <h3 id="productModalTitle">商品の追加</h3>
+            <input type="text" class="modal-input" id="productNameInput" placeholder="商品名を入力">
+            <input type="number" class="modal-input" id="productPriceInput" placeholder="価格（円）" min="0">
+            <div class="calc-input-row">
+                <div class="calc-input-group">
+                    <label>数量</label>
+                    <input type="number" id="productQuantityInput" placeholder="例: 1000" min="1">
+                </div>
+                <div class="calc-input-group">
+                    <label>単位</label>
+                    <select id="productUnitInput">
+                        <option value="g">g（グラム）</option>
+                        <option value="kg">kg（キログラム）</option>
+                        <option value="枚">枚</option>
+                        <option value="個">個</option>
+                        <option value="本">本</option>
+                        <option value="パック">パック</option>
+                        <option value="袋">袋</option>
+                        <option value="箱">箱</option>
+                        <option value="尾">尾</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button class="modal-btn cancel" onclick="closeProductModal()">キャンセル</button>
+                <button class="modal-btn confirm" id="productModalConfirm" onclick="confirmProduct()">追加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 原価計算モーダル -->
+    <div class="modal" id="calcModal">
+        <div class="modal-content">
+            <h3 id="calcProductName">原価計算</h3>
+            <div class="calc-result" id="calcUnitResult">
+                <div class="unit-price" id="calcUnitPrice"></div>
+            </div>
+            <div class="calc-input-group">
+                <label>使用量</label>
+                <input type="number" id="calcUsageInput" placeholder="使用量を入力" min="0" step="0.1" oninput="updateCalcResult()">
+            </div>
+            <div class="calc-result" id="calcCostResult" style="display:none;">
+                <div class="cost-price" id="calcCostPrice"></div>
+            </div>
+            <div class="modal-buttons">
+                <button class="modal-btn cancel" onclick="closeCalcModal()">閉じる</button>
+            </div>
+        </div>
+    </div>
+
     <!-- トースト -->
     <div class="toast" id="toast"></div>
 
     <script>
         // 設定
-        // API URL - スマホからはIPアドレスに自動的に切り替わります
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         const API_URL = '/api/data';
         const STORAGE_KEY = 'priceAppData';
 
@@ -538,7 +661,8 @@
         let currentSupplierIndex = null;
         let isOnline = navigator.onLine;
         let deferredPrompt = null;
-        let hasLocalChanges = false; // ローカルで変更があるか
+        let hasLocalChanges = false;
+        let editingProductIndex = null; // 編集中の商品インデックス（null=新規追加）
 
         // Service Worker登録
         if ('serviceWorker' in navigator) {
@@ -576,7 +700,6 @@
             if (isOnline) {
                 badge.textContent = 'オンライン';
                 badge.className = 'status-badge online';
-                // オンラインになったらサーバーと同期
                 syncWithServer();
             } else {
                 badge.textContent = 'オフライン';
@@ -596,11 +719,9 @@
                     if (response.ok) {
                         const serverData = await response.json();
                         data = serverData;
-                        // ローカルにも保存
                         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
                     }
                 } catch (e) {
-                    // エラーならローカルデータを使用
                     loadLocalData();
                 }
             } else {
@@ -618,13 +739,11 @@
 
         // サーバーと同期
         async function syncWithServer() {
-            if (!isOnline || hasLocalChanges) return; // ローカルで変更中はスキップ
-
+            if (!isOnline || hasLocalChanges) return;
             try {
                 const response = await fetch(API_URL);
                 if (response.ok) {
                     const serverData = await response.json();
-                    // サーバーデータの方が新しければ更新
                     if (JSON.stringify(serverData) !== JSON.stringify(data)) {
                         data = serverData;
                         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -638,9 +757,7 @@
 
         // データ保存
         async function saveData() {
-            // ローカルに保存
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-
             if (isOnline) {
                 try {
                     const response = await fetch(API_URL, {
@@ -649,7 +766,7 @@
                         body: JSON.stringify(data)
                     });
                     if (response.ok) {
-                        hasLocalChanges = false; // 保存成功したのでフラグ解除
+                        hasLocalChanges = false;
                         showToast('保存しました');
                         return;
                     }
@@ -704,49 +821,155 @@
                 return;
             }
 
-            area.innerHTML = '<div class="product-list">' + supplier.products.map((product, pIndex) => `
+            area.innerHTML = '<div class="product-list">' + supplier.products.map((product, pIndex) => {
+                const unitInfo = product.baseQuantity
+                    ? `<div class="product-unit-info">¥${product.price.toLocaleString()} / ${product.baseQuantity}${product.baseUnit || 'g'}</div>`
+                    : '';
+                const calcBtn = product.baseQuantity
+                    ? `<button class="calc-btn" onclick="showCalcModal(${pIndex})">原価計算</button>`
+                    : '';
+                return `
                 <div class="product-item">
-                    <div class="product-info" onclick="editProduct(${pIndex})">
+                    <div class="product-info">
                         <div class="product-name">${escapeHtml(product.name)}</div>
                         <div class="product-price">¥${product.price.toLocaleString()}</div>
+                        ${unitInfo}
                     </div>
                     <div class="product-actions">
+                        ${calcBtn}
                         <button class="edit-btn" onclick="editProduct(${pIndex})">編集</button>
                         <button class="delete-product" onclick="deleteProduct(${pIndex})">削除</button>
                     </div>
                 </div>
-            `).join('') + '</div>';
+            `}).join('') + '</div>';
         }
 
-        // 商品編集
-        async function editProduct(productIndex) {
+        // ===== 商品追加・編集モーダル =====
+        function showProductModal(mode, productIndex) {
+            editingProductIndex = mode === 'edit' ? productIndex : null;
+            const modal = document.getElementById('productModal');
+            const titleEl = document.getElementById('productModalTitle');
+            const confirmBtn = document.getElementById('productModalConfirm');
+
+            if (mode === 'edit') {
+                const product = data.suppliers[currentSupplierIndex].products[productIndex];
+                titleEl.textContent = '商品の編集';
+                confirmBtn.textContent = '更新';
+                document.getElementById('productNameInput').value = product.name;
+                document.getElementById('productPriceInput').value = product.price;
+                document.getElementById('productQuantityInput').value = product.baseQuantity || '';
+                document.getElementById('productUnitInput').value = product.baseUnit || 'g';
+            } else {
+                titleEl.textContent = '商品の追加';
+                confirmBtn.textContent = '追加';
+                document.getElementById('productNameInput').value = '';
+                document.getElementById('productPriceInput').value = '';
+                document.getElementById('productQuantityInput').value = '';
+                document.getElementById('productUnitInput').value = 'g';
+            }
+
+            modal.classList.add('show');
+            document.getElementById('productNameInput').focus();
+        }
+
+        function closeProductModal() {
+            document.getElementById('productModal').classList.remove('show');
+            editingProductIndex = null;
+        }
+
+        async function confirmProduct() {
+            const name = document.getElementById('productNameInput').value.trim();
+            const price = parseInt(document.getElementById('productPriceInput').value);
+            const quantity = parseInt(document.getElementById('productQuantityInput').value) || null;
+            const unit = document.getElementById('productUnitInput').value;
+
+            if (!name) { alert('商品名を入力してください'); return; }
+            if (isNaN(price) || price < 0) { alert('正しい価格を入力してください'); return; }
+
             const supplier = data.suppliers[currentSupplierIndex];
-            const product = supplier.products[productIndex];
+            const productData = { name, price, baseQuantity: quantity, baseUnit: quantity ? unit : null };
 
-            const name = prompt('商品名', product.name);
-            if (name === null) return;
-            if (name.trim() === '') {
-                alert('商品名を入力してください');
-                return;
+            if (editingProductIndex !== null) {
+                // 編集
+                supplier.products[editingProductIndex] = productData;
+                showToast('商品を更新しました');
+            } else {
+                // 追加
+                supplier.products.push(productData);
+                showToast('商品を追加しました');
             }
 
-            const price = prompt('価格（円）', product.price);
-            if (price === null) return;
-            const priceNum = parseInt(price);
-            if (isNaN(priceNum) || priceNum < 0) {
-                alert('正しい価格を入力してください');
-                return;
-            }
-
-            product.name = name.trim();
-            product.price = priceNum;
             hasLocalChanges = true;
+            closeProductModal();
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
             renderProducts();
-            await saveData(); // サーバーにも保存
+            await saveData();
         }
 
-        // 業者追加モーダル
+        function addProduct() {
+            showProductModal('add');
+        }
+
+        function editProduct(productIndex) {
+            showProductModal('edit', productIndex);
+        }
+
+        // ===== 原価計算モーダル =====
+        function showCalcModal(productIndex) {
+            const product = data.suppliers[currentSupplierIndex].products[productIndex];
+            const modal = document.getElementById('calcModal');
+            const q = product.baseQuantity;
+            const u = product.baseUnit || 'g';
+
+            document.getElementById('calcProductName').textContent = `${product.name} の原価計算`;
+
+            // 単位あたりの原価を計算
+            const perUnit = product.price / q;
+            let displayUnit = u;
+            let displayPerUnit = perUnit;
+
+            // kgの場合は1gあたりに変換して表示
+            if (u === 'kg') {
+                displayUnit = 'g';
+                displayPerUnit = perUnit / 1000;
+            }
+
+            document.getElementById('calcUnitPrice').innerHTML =
+                `¥${product.price.toLocaleString()} ÷ ${q.toLocaleString()}${u} = <strong>¥${displayPerUnit.toFixed(2)}/1${displayUnit}</strong>`;
+            document.getElementById('calcUsageInput').value = '';
+            document.getElementById('calcUsageInput').placeholder = `${displayUnit}数を入力`;
+            document.getElementById('calcCostResult').style.display = 'none';
+
+            // 計算用データを保存
+            modal.dataset.perUnit = displayPerUnit;
+            modal.dataset.displayUnit = displayUnit;
+
+            modal.classList.add('show');
+            document.getElementById('calcUsageInput').focus();
+        }
+
+        function updateCalcResult() {
+            const modal = document.getElementById('calcModal');
+            const usage = parseFloat(document.getElementById('calcUsageInput').value);
+            const perUnit = parseFloat(modal.dataset.perUnit);
+            const displayUnit = modal.dataset.displayUnit;
+            const resultDiv = document.getElementById('calcCostResult');
+            const costPriceEl = document.getElementById('calcCostPrice');
+
+            if (!isNaN(usage) && usage > 0) {
+                const cost = perUnit * usage;
+                costPriceEl.innerHTML = `原価: ¥${cost.toFixed(1)} <small>(${usage}${displayUnit} × ¥${perUnit.toFixed(2)})</small>`;
+                resultDiv.style.display = 'block';
+            } else {
+                resultDiv.style.display = 'none';
+            }
+        }
+
+        function closeCalcModal() {
+            document.getElementById('calcModal').classList.remove('show');
+        }
+
+        // ===== 業者管理 =====
         function showAddSupplierModal() {
             document.getElementById('supplierModal').classList.add('show');
             document.getElementById('supplierNameInput').value = '';
@@ -759,24 +982,16 @@
 
         async function addSupplier() {
             const name = document.getElementById('supplierNameInput').value.trim();
-            if (name === '') {
-                alert('業者名を入力してください');
-                return;
-            }
+            if (name === '') { alert('業者名を入力してください'); return; }
 
-            data.suppliers.push({
-                name: name,
-                products: []
-            });
+            data.suppliers.push({ name, products: [] });
             hasLocalChanges = true;
-
             closeSupplierModal();
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
             renderSuppliers();
-            await saveData(); // サーバーにも保存
+            await saveData();
         }
 
-        // 業者削除
         async function deleteSupplier(index) {
             if (confirm('「' + data.suppliers[index].name + '」を削除しますか？')) {
                 data.suppliers.splice(index, 1);
@@ -789,37 +1004,10 @@
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
                 renderSuppliers();
                 renderProducts();
-                await saveData(); // サーバーにも保存
+                await saveData();
             }
         }
 
-        // 商品追加
-        async function addProduct() {
-            const supplier = data.suppliers[currentSupplierIndex];
-
-            const name = prompt('商品名');
-            if (name === null || name.trim() === '') return;
-
-            const price = prompt('価格（円）', '0');
-            const priceNum = parseInt(price);
-            if (isNaN(priceNum) || priceNum < 0) {
-                alert('正しい価格を入力してください');
-                return;
-            }
-
-            supplier.products.push({
-                name: name.trim(),
-                price: priceNum
-            });
-            hasLocalChanges = true;
-
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-            renderProducts();
-            await saveData(); // サーバーにも保存
-            showToast('商品を追加しました');
-        }
-
-        // 商品削除
         async function deleteProduct(productIndex) {
             const supplier = data.suppliers[currentSupplierIndex];
             if (confirm('「' + supplier.products[productIndex].name + '」を削除しますか？')) {
@@ -827,7 +1015,7 @@
                 hasLocalChanges = true;
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
                 renderProducts();
-                await saveData(); // サーバーにも保存
+                await saveData();
             }
         }
 
@@ -850,8 +1038,11 @@
         document.getElementById('supplierNameInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') addSupplier();
         });
+        document.getElementById('productPriceInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') confirmProduct();
+        });
 
-        // 定期同期（オンライン時のみ）
+        // 定期同期
         setInterval(() => {
             if (isOnline) syncWithServer();
         }, 10000);
