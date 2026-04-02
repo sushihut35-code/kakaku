@@ -714,35 +714,36 @@
         window.addEventListener('offline', updateOnlineStatus);
         updateOnlineStatus();
 
-        // データ読み込み（ローカル優先）
+        // データ読み込み（ローカル絶対優先）
         async function loadData() {
             const localData = localStorage.getItem(STORAGE_KEY);
 
+            // ローカルデータがあれば常に優先
+            if (localData) {
+                data = JSON.parse(localData);
+                renderSuppliers();
+                // バックグラウンドでサーバーにも保存
+                if (isOnline) {
+                    try {
+                        await fetch(API_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+                    } catch (e) {}
+                }
+                return;
+            }
+
+            // ローカルデータがない場合のみサーバーから取得
             if (isOnline) {
                 try {
                     const response = await fetch(API_URL);
                     if (response.ok) {
-                        const serverData = await response.json();
-                        // ローカルデータがある ＆ ローカルの方が商品数が多ければ優先
-                        if (localData) {
-                            const local = JSON.parse(localData);
-                            const localCount = local.suppliers.reduce((sum, s) => sum + s.products.length, 0);
-                            const serverCount = serverData.suppliers.reduce((sum, s) => sum + s.products.length, 0);
-                            if (localCount >= serverCount) {
-                                data = local;
-                            } else {
-                                data = serverData;
-                            }
-                        } else {
-                            data = serverData;
-                        }
+                        data = await response.json();
                         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
                     }
-                } catch (e) {
-                    loadLocalData();
-                }
-            } else {
-                loadLocalData();
+                } catch (e) {}
             }
             renderSuppliers();
         }
@@ -754,21 +755,15 @@
             }
         }
 
-        // サーバーと同期
+        // サーバーと同期（ローカルデータをサーバーにアップ）
         async function syncWithServer() {
-            if (!isOnline || hasLocalChanges) return;
+            if (!isOnline) return;
             try {
-                const response = await fetch(API_URL);
-                if (response.ok) {
-                    const serverData = await response.json();
-                    if (JSON.stringify(serverData) !== JSON.stringify(data)) {
-                        data = serverData;
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-                        renderSuppliers();
-                        if (currentSupplierIndex !== null) renderProducts();
-                        showToast('データを同期しました');
-                    }
-                }
+                await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
             } catch (e) {}
         }
 
