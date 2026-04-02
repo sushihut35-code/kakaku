@@ -711,14 +711,28 @@
         window.addEventListener('offline', updateOnlineStatus);
         updateOnlineStatus();
 
-        // データ読み込み
+        // データ読み込み（ローカル優先）
         async function loadData() {
+            const localData = localStorage.getItem(STORAGE_KEY);
+
             if (isOnline) {
                 try {
                     const response = await fetch(API_URL);
                     if (response.ok) {
                         const serverData = await response.json();
-                        data = serverData;
+                        // ローカルデータがある ＆ ローカルの方が商品数が多ければ優先
+                        if (localData) {
+                            const local = JSON.parse(localData);
+                            const localCount = local.suppliers.reduce((sum, s) => sum + s.products.length, 0);
+                            const serverCount = serverData.suppliers.reduce((sum, s) => sum + s.products.length, 0);
+                            if (localCount >= serverCount) {
+                                data = local;
+                            } else {
+                                data = serverData;
+                            }
+                        } else {
+                            data = serverData;
+                        }
                         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
                     }
                 } catch (e) {
