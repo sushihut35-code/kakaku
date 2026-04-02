@@ -645,6 +645,7 @@
             </div>
             <div class="modal-buttons">
                 <button class="modal-btn cancel" onclick="closeCalcModal()">閉じる</button>
+                <button class="modal-btn confirm" id="calcSaveBtn" style="background:#27ae60;display:none;" onclick="saveUsageAmount()">使用量を保存</button>
             </div>
         </div>
     </div>
@@ -842,12 +843,26 @@
                 const calcBtn = product.baseQuantity
                     ? `<button class="calc-btn" onclick="showCalcModal(${pIndex})">原価計算</button>`
                     : '';
+                // 保存済みの原価を表示
+                let savedCost = '';
+                if (product.baseQuantity && product.usageAmount) {
+                    let perUnit = product.price / product.baseQuantity;
+                    let usageUnit = product.baseUnit || 'g';
+                    let usageAmt = product.usageAmount;
+                    if (product.baseUnit === 'kg') {
+                        perUnit = perUnit / 1000;
+                        usageUnit = 'g';
+                    }
+                    const cost = perUnit * usageAmt;
+                    savedCost = `<div class="product-unit-info" style="color:#27ae60;font-weight:600;">原価: ¥${cost.toFixed(1)}（${usageAmt}${usageUnit}使用）</div>`;
+                }
                 return `
                 <div class="product-item">
                     <div class="product-info">
                         <div class="product-name">${escapeHtml(product.name)}</div>
                         <div class="product-price">¥${product.price.toLocaleString()}</div>
                         ${unitInfo}
+                        ${savedCost}
                     </div>
                     <div class="product-actions">
                         ${calcBtn}
@@ -929,7 +944,10 @@
         }
 
         // ===== 原価計算モーダル =====
+        let calcTargetProductIndex = null;
+
         function showCalcModal(productIndex) {
+            calcTargetProductIndex = productIndex;
             const product = data.suppliers[currentSupplierIndex].products[productIndex];
             const modal = document.getElementById('calcModal');
             const q = product.baseQuantity;
@@ -950,16 +968,26 @@
 
             document.getElementById('calcUnitPrice').innerHTML =
                 `¥${product.price.toLocaleString()} ÷ ${q.toLocaleString()}${u} = <strong>¥${displayPerUnit.toFixed(2)}/1${displayUnit}</strong>`;
-            document.getElementById('calcUsageInput').value = '';
-            document.getElementById('calcUsageInput').placeholder = `${displayUnit}数を入力`;
-            document.getElementById('calcCostResult').style.display = 'none';
+
+            // 保存済みの使用量があれば表示
+            const usageInput = document.getElementById('calcUsageInput');
+            usageInput.value = product.usageAmount || '';
+            usageInput.placeholder = `${displayUnit}数を入力`;
+            document.getElementById('calcSaveBtn').style.display = 'none';
 
             // 計算用データを保存
             modal.dataset.perUnit = displayPerUnit;
             modal.dataset.displayUnit = displayUnit;
 
+            // 使用量が既に入力されていれば計算結果を表示
+            if (product.usageAmount) {
+                updateCalcResult();
+            } else {
+                document.getElementById('calcCostResult').style.display = 'none';
+            }
+
             modal.classList.add('show');
-            document.getElementById('calcUsageInput').focus();
+            usageInput.focus();
         }
 
         function updateCalcResult() {
@@ -969,18 +997,37 @@
             const displayUnit = modal.dataset.displayUnit;
             const resultDiv = document.getElementById('calcCostResult');
             const costPriceEl = document.getElementById('calcCostPrice');
+            const saveBtn = document.getElementById('calcSaveBtn');
 
             if (!isNaN(usage) && usage > 0) {
                 const cost = perUnit * usage;
                 costPriceEl.innerHTML = `原価: ¥${cost.toFixed(1)} <small>(${usage}${displayUnit} × ¥${perUnit.toFixed(2)})</small>`;
                 resultDiv.style.display = 'block';
+                saveBtn.style.display = 'block';
             } else {
                 resultDiv.style.display = 'none';
+                saveBtn.style.display = 'none';
             }
+        }
+
+        async function saveUsageAmount() {
+            const usage = parseFloat(document.getElementById('calcUsageInput').value);
+            if (isNaN(usage) || usage <= 0 || calcTargetProductIndex === null) return;
+
+            const product = data.suppliers[currentSupplierIndex].products[calcTargetProductIndex];
+            product.usageAmount = usage;
+            hasLocalChanges = true;
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            renderProducts();
+            await saveData();
+            closeCalcModal();
+            showToast('使用量を保存しました');
         }
 
         function closeCalcModal() {
             document.getElementById('calcModal').classList.remove('show');
+            calcTargetProductIndex = null;
         }
 
         // ===== 業者管理 =====
