@@ -1179,8 +1179,20 @@
         document.getElementById('supplierNameInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') addSupplier();
         });
+        document.getElementById('productNameInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') document.getElementById('productPriceInput').focus();
+        });
         document.getElementById('productPriceInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') document.getElementById('productQuantityInput').focus();
+        });
+        document.getElementById('productQuantityInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') confirmProduct();
+        });
+        document.getElementById('calcUsageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') saveUsageAmount();
+        });
+        document.getElementById('calcEdibleInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') document.getElementById('calcUsageInput').focus();
         });
 
         // 定期同期
