@@ -1175,24 +1175,41 @@
             setTimeout(() => toast.classList.remove('show'), 2000);
         }
 
-        // エンターキー
+        // エンターキー（全項目入力済みなら自動保存、未入力なら次のフィールドへ）
         document.getElementById('supplierNameInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') addSupplier();
         });
-        document.getElementById('productNameInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') document.getElementById('productPriceInput').focus();
+
+        // 商品モーダル: どこでEnter押しても、全部入ってたら保存
+        ['productNameInput', 'productPriceInput', 'productQuantityInput'].forEach(id => {
+            document.getElementById(id).addEventListener('keypress', (e) => {
+                if (e.key !== 'Enter') return;
+                const name = document.getElementById('productNameInput').value.trim();
+                const price = document.getElementById('productPriceInput').value;
+                const qty = document.getElementById('productQuantityInput').value;
+                if (name && price && qty) {
+                    confirmProduct();
+                } else if (!name) {
+                    document.getElementById('productNameInput').focus();
+                } else if (!price) {
+                    document.getElementById('productPriceInput').focus();
+                } else if (!qty) {
+                    document.getElementById('productQuantityInput').focus();
+                }
+            });
         });
-        document.getElementById('productPriceInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') document.getElementById('productQuantityInput').focus();
-        });
-        document.getElementById('productQuantityInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') confirmProduct();
-        });
-        document.getElementById('calcUsageInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') saveUsageAmount();
-        });
-        document.getElementById('calcEdibleInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') document.getElementById('calcUsageInput').focus();
+
+        // 原価計算モーダル: どこでEnter押しても、使用量入ってたら保存
+        ['calcEdibleInput', 'calcUsageInput'].forEach(id => {
+            document.getElementById(id).addEventListener('keypress', (e) => {
+                if (e.key !== 'Enter') return;
+                const usage = document.getElementById('calcUsageInput').value;
+                if (usage) {
+                    saveUsageAmount();
+                } else {
+                    document.getElementById('calcUsageInput').focus();
+                }
+            });
         });
 
         // 定期同期
