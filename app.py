@@ -81,7 +81,7 @@ def update_data():
         resp = http_req.patch(
             f"{SUPABASE_URL}/rest/v1/app_data?id=eq.1",
             headers=sb_headers(),
-            json={"data": json.dumps(payload, ensure_ascii=False), "updated_at": updated_at}
+            json={"data": payload, "updated_at": updated_at}
         )
         resp.raise_for_status()
         return jsonify({'success': True, 'updated_at': updated_at})
