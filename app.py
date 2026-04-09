@@ -1,60 +1,94 @@
 from flask import Flask, jsonify, request, send_from_directory
+import requests as http_req
 import json
 import os
+from datetime import datetime, timezone
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, static_folder=BASE_DIR)
 
-DATA_FILE = os.path.join(BASE_DIR, 'data.json')
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://azmymticdfbsxfkthgj.supabase.co")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_fHE_lHb3Ma4g0SVlyBtv2w_SH-MZ-Tf")
 
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    else:
-        default_data = {
-            "suppliers": [
-                {
-                    "name": "山口水産",
-                    "products": [
-                        {"name": "刺身盛り合わせ", "price": 1500},
-                        {"name": "焼き魚セット", "price": 800},
-                        {"name": "寿司セット", "price": 2000}
-                    ]
-                },
-                {
-                    "name": "田中青果",
-                    "products": [
-                        {"name": "季節野菜セット", "price": 500},
-                        {"name": "フルーツ盛り", "price": 1200}
-                    ]
-                }
+DEFAULT_DATA = {
+    "suppliers": [
+        {
+            "name": "山口水産",
+            "products": [
+                {"name": "刺身盛り合わせ", "price": 1500},
+                {"name": "焼き魚セット", "price": 800},
+                {"name": "寿司セット", "price": 2000}
+            ]
+        },
+        {
+            "name": "田中青果",
+            "products": [
+                {"name": "季節野菜セット", "price": 500},
+                {"name": "フルーツ盛り", "price": 1200}
             ]
         }
-        save_data(default_data)
-        return default_data
+    ]
+}
 
-def save_data(data):
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def sb_headers():
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json"
+    }
+
+
+def utc_now():
+    return datetime.now(timezone.utc).isoformat()
+
 
 @app.route('/')
 def index():
     return send_from_directory(BASE_DIR, 'index.html')
 
+
 @app.route('/<path:filename>')
 def static_files(filename):
     return send_from_directory(BASE_DIR, filename)
 
+
 @app.route('/api/data', methods=['GET'])
 def get_data():
-    return jsonify(load_data())
+    if not SUPABASE_URL:
+        return jsonify({"data": DEFAULT_DATA, "updated_at": None})
+    try:
+        resp = http_req.get(
+            f"{SUPABASE_URL}/rest/v1/app_data?id=eq.1&select=data,updated_at",
+            headers=sb_headers()
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        if rows:
+            return jsonify({"data": rows[0]["data"], "updated_at": rows[0]["updated_at"]})
+    except Exception as e:
+        print(f"GET error: {e}")
+    return jsonify({"data": DEFAULT_DATA, "updated_at": None})
+
 
 @app.route('/api/data', methods=['POST'])
 def update_data():
-    data = request.json
-    save_data(data)
-    return jsonify({'success': True})
+    payload = request.json
+    updated_at = utc_now()
+    if not SUPABASE_URL:
+        return jsonify({'success': False, 'error': 'No Supabase config'}), 500
+    try:
+        resp = http_req.patch(
+            f"{SUPABASE_URL}/rest/v1/app_data?id=eq.1",
+            headers=sb_headers(),
+            json={"data": json.dumps(payload, ensure_ascii=False), "updated_at": updated_at}
+        )
+        resp.raise_for_status()
+        return jsonify({'success': True, 'updated_at': updated_at})
+    except Exception as e:
+        print(f"POST error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     print('サーバーを起動しました...')

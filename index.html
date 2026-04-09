@@ -683,14 +683,15 @@
         // 設定
         const API_URL = '/api/data';
         const STORAGE_KEY = 'priceAppData';
+        const TIMESTAMP_KEY = 'priceAppTimestamp';
 
         let data = { suppliers: [] };
         let currentSupplierIndex = null;
         let isOnline = navigator.onLine;
         let deferredPrompt = null;
         let hasLocalChanges = false;
-        let editingProductIndex = null; // 編集中の商品インデックス（null=新規追加）
-        let showCost = false; // 原価表示トグル（デフォルト非表示）
+        let editingProductIndex = null;
+        let showCost = false;
 
         // Service Worker登録
         if ('serviceWorker' in navigator) {
@@ -728,7 +729,7 @@
             if (isOnline) {
                 badge.textContent = 'オンライン';
                 badge.className = 'status-badge online';
-                syncWithServer();
+                pullFromServer();
             } else {
                 badge.textContent = 'オフライン';
                 badge.className = 'status-badge offline';
@@ -739,62 +740,69 @@
         window.addEventListener('offline', updateOnlineStatus);
         updateOnlineStatus();
 
-        // データ読み込み（ローカル絶対優先）
-        async function loadData() {
-            const localData = localStorage.getItem(STORAGE_KEY);
+        // ===== 同期ロジック（サーバー優先） =====
 
-            // ローカルデータがあれば常に優先
+        async function loadData() {
+            // まずlocalStorageで即表示
+            const localData = localStorage.getItem(STORAGE_KEY);
             if (localData) {
                 data = JSON.parse(localData);
                 renderSuppliers();
-                // バックグラウンドでサーバーにも保存
-                if (isOnline) {
-                    try {
-                        await fetch(API_URL, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(data)
-                        });
-                    } catch (e) {}
-                }
-                return;
+                if (currentSupplierIndex !== null) renderProducts();
             }
 
-            // ローカルデータがない場合のみサーバーから取得
+            // オンラインならサーバーから最新を取得して比較
             if (isOnline) {
-                try {
-                    const response = await fetch(API_URL);
-                    if (response.ok) {
-                        data = await response.json();
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-                    }
-                } catch (e) {}
-            }
-            renderSuppliers();
-        }
-
-        function loadLocalData() {
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (saved) {
-                data = JSON.parse(saved);
+                await pullFromServer();
             }
         }
 
-        // サーバーと同期（ローカルデータをサーバーにアップ）
-        async function syncWithServer() {
+        // サーバーから最新データを取得してlocalStorageと比較
+        async function pullFromServer() {
             if (!isOnline) return;
             try {
-                await fetch(API_URL, {
+                const response = await fetch(API_URL);
+                if (!response.ok) return;
+                const result = await response.json();
+                const serverData = result.data;
+                const serverTimestamp = result.updated_at;
+                const localTimestamp = localStorage.getItem(TIMESTAMP_KEY);
+
+                // サーバーのほうが新しければサーバーデータを採用
+                if (!localTimestamp || !serverTimestamp || serverTimestamp > localTimestamp) {
+                    data = serverData;
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                    localStorage.setItem(TIMESTAMP_KEY, serverTimestamp || new Date().toISOString());
+                    renderSuppliers();
+                    if (currentSupplierIndex !== null) renderProducts();
+                } else if (localTimestamp > serverTimestamp && hasLocalChanges) {
+                    // ローカルのほうが新しい（オフライン中に編集）→ サーバーにプッシュ
+                    await pushToServer();
+                }
+            } catch (e) {}
+        }
+
+        // ローカルデータをサーバーにプッシュ
+        async function pushToServer() {
+            if (!isOnline) return;
+            try {
+                const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
+                if (response.ok) {
+                    const result = await response.json();
+                    localStorage.setItem(TIMESTAMP_KEY, result.updated_at);
+                    hasLocalChanges = false;
+                }
             } catch (e) {}
         }
 
-        // データ保存
+        // データ保存（localStorage即時 + サーバー非同期）
         async function saveData() {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            hasLocalChanges = true;
             if (isOnline) {
                 try {
                     const response = await fetch(API_URL, {
@@ -803,14 +811,16 @@
                         body: JSON.stringify(data)
                     });
                     if (response.ok) {
+                        const result = await response.json();
+                        localStorage.setItem(TIMESTAMP_KEY, result.updated_at);
                         hasLocalChanges = false;
                         showToast('保存しました');
                         return;
                     }
                 } catch (e) {}
-                showToast('オフラインモードで保存しました');
+                showToast('オフライン保存（同期は後で）');
             } else {
-                showToast('オフラインモードで保存しました');
+                showToast('オフライン保存（同期は後で）');
             }
         }
 
@@ -1212,10 +1222,11 @@
             });
         });
 
-        // 定期同期
+        // 定期同期（サーバーから最新を取得）
         setInterval(() => {
-            if (isOnline) syncWithServer();
-        }, 10000);
+            if (isOnline && !hasLocalChanges) pullFromServer();
+            else if (isOnline && hasLocalChanges) pushToServer();
+        }, 30000);
 
         // 初期化
         showCost = localStorage.getItem('showCost') === 'true';
