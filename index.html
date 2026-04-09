@@ -760,24 +760,27 @@
         // サーバーから最新データを取得してlocalStorageと比較
         async function pullFromServer() {
             if (!isOnline) return;
+            // ローカルに未同期の変更がある場合はサーバーにプッシュする
+            if (hasLocalChanges) {
+                await pushToServer();
+                return;
+            }
             try {
                 const response = await fetch(API_URL);
                 if (!response.ok) return;
                 const result = await response.json();
                 const serverData = result.data;
                 const serverTimestamp = result.updated_at;
+                if (!serverTimestamp) return; // サーバータイムスタンプがない場合は上書きしない
                 const localTimestamp = localStorage.getItem(TIMESTAMP_KEY);
 
                 // サーバーのほうが新しければサーバーデータを採用
-                if (!localTimestamp || !serverTimestamp || serverTimestamp > localTimestamp) {
+                if (!localTimestamp || serverTimestamp > localTimestamp) {
                     data = serverData;
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-                    localStorage.setItem(TIMESTAMP_KEY, serverTimestamp || new Date().toISOString());
+                    localStorage.setItem(TIMESTAMP_KEY, serverTimestamp);
                     renderSuppliers();
                     if (currentSupplierIndex !== null) renderProducts();
-                } else if (localTimestamp > serverTimestamp && hasLocalChanges) {
-                    // ローカルのほうが新しい（オフライン中に編集）→ サーバーにプッシュ
-                    await pushToServer();
                 }
             } catch (e) {}
         }
