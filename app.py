@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, static_folder=BASE_DIR)
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://azmymticdfbsxfkthgj.supabase.co")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://bsgfragmulyurahonkle.supabase.co")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_fHE_lHb3Ma4g0SVlyBtv2w_SH-MZ-Tf")
 
 DEFAULT_DATA = {
